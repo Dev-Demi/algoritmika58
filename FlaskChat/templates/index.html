@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Чат</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#007bff"/>
+</head>
+<body>
+    {% if username %}
+    <div class="container">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="user-info">
+                    <span>Вы: <strong>{{ username }}</strong></span>
+                    <a href="{{ url_for('logout') }}">Выйти</a>
+                </div>
+            </div>
+            <ul class="user-list">
+                <li>
+                    <a href="{{ url_for('index') }}" id="chat-general" class="{{ 'active' if not active_chat else '' }}">
+                        <span>Общий чат</span>
+                        <span class="notification-dot"></span>
+                    </a>
+                </li>
+                {% for user in users %}
+                <li>
+                    <a href="{{ url_for('index', to=user) }}" id="chat-{{ user }}" class="{{ 'active' if active_chat == user else '' }}">
+                        <span>{{ user }}</span>
+                        <span class="notification-dot"></span>
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        <div class="chat-area">
+            <div class="messages" id="messages-container">
+                {% for message in messages %}
+                    {% set is_image_only = message.file_path and not message.message and message.file_path.split('.')[-1].lower() in ['png', 'jpg', 'jpeg', 'gif'] %}
+                    <div class="message {{ 'from-me' if message.from_user == username else '' }} {{ 'image-only' if is_image_only else '' }}">
+                        {% if message.message %}
+                        <p>
+                            {% if not active_chat %}
+                                <b>{{ message.from_user }}</b>:
+                            {% endif %}
+                            {{ message.message }}
+                        </p>
+                        {% endif %}
+
+                        {% if message.file_path %}
+                            <div class="message-attachment">
+                                {% set ext = message.file_path.split('.')[-1].lower() %}
+                                {% if ext in ['png', 'jpg', 'jpeg', 'gif'] %}
+                                    <a href="{{ url_for('static', filename=message.file_path) }}" target="_blank">
+                                        <img src="{{ url_for('static', filename=message.file_path) }}" alt="Прикрепленное изображение">
+                                    </a>
+                                {% else %}
+                                    <a href="{{ url_for('static', filename=message.file_path) }}" target="_blank">
+                                        Скачать файл: {{ message.file_path.split('/')[-1] }}
+                                    </a>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+
+                        <i><small>{{ message.timestamp.split('.')[0] }}</small></i>
+                    </div>
+                {% endfor %}
+            </div>
+            <form class="message-form" method="post" action="{{ url_for('index', to=active_chat) }}" enctype="multipart/form-data">
+                <input type="hidden" name="to_user" value="{{ active_chat or '' }}">
+                <div class="message-form-fields">
+                    <textarea name="message" placeholder="Напишите сообщение..."></textarea>
+                    <button type="submit">Отправить</button>
+                </div>
+                <div class="message-form-file">
+                    <label for="file">Прикрепить файл:</label>
+                    <input type="file" name="file" id="file">
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <audio id="notification-sound" src="{{ url_for('static', filename='notification.mp3') }}" preload="auto"></audio>
+
+    <script>
+        // PWA Service Worker Registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register("{{ url_for('service_worker') }}")
+                    .then(registration => {
+                        console.log('Service Worker registered: ', registration);
+                    })
+                    .catch(error => {
+                        console.log('Service Worker registration failed: ', error);
+                    });
+            });
+        }
+
+        // Scroll to the bottom of the messages
+        const messagesContainer = document.getElementById('messages-container');
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+        // Polling for new messages
+        const activeChatUser = "{{ active_chat or '' }}";
+
+        function checkForNewMessages() {
+            fetch(`{{ url_for('check_new_messages') }}`) // Removed last_id parameter
+                .then(response => response.json())
+                .then(data => {
+                    if (data.new_messages_from && data.new_messages_from.length > 0) {
+                        let shouldPlaySound = false;
+                        data.new_messages_from.forEach(sender => {
+                            let chatLink;
+                            if (sender === 'general') {
+                                chatLink = document.getElementById('chat-general');
+                            } else {
+                                chatLink = document.getElementById(`chat-${sender}`);
+                            }
+
+                            if (chatLink) {
+                                if ((sender === 'general' && activeChatUser !== '') || (sender !== 'general' && sender !== activeChatUser)) {
+                                    chatLink.querySelector('.notification-dot').style.display = 'inline-block';
+                                    shouldPlaySound = true;
+                                } else {
+                                    // If in the active chat, just reload the page to show the new message
+                                    // The server-side logic already marks messages as read when viewing
+                                    location.reload();
+                                }
+                            }
+                        });
+
+                        if (shouldPlaySound) {
+                            document.getElementById('notification-sound').play().catch(e => console.log("Audio play failed:", e));
+                        }
+                    }
+                })
+                .catch(error => console.error('Error checking for messages:', error));
+        }
+
+        setInterval(checkForNewMessages, 5000);
+    </script>
+
+    {% else %}
+    <div class="auth-container">
+        <h2>Добро пожаловать!</h2>
+        <p class="auth-links">
+            <a href="{{ url_for('login') }}">Войдите</a> или <a href="{{ url_for('register') }}">зарегистрируйтесь</a>, чтобы начать общение.
+        </p>
+    </div>
+    {% endif %}
+</body>
+</html>

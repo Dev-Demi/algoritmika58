@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tank Game</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+<body>
+    <h1>Ваш логин: {{ username }}</h1>
+    <canvas id="gameCanvas"></canvas>
+    <script src="https://cdn.socket.io/4.5.2/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='game.js') }}"></script>
+    <br>
+    <a href="{{ url_for('logout') }}">Выход</a>
+</body>
+</html>
